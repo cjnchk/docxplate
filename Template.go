@@ -36,6 +36,9 @@ type Template struct {
 	// only modified files (converted to []byte) save here
 	modified map[string][]byte
 
+	// all document's xml files
+	xmlFiles []*zip.File
+
 	// hold all parsed params:values here
 	params ParamList
 }
@@ -71,6 +74,16 @@ func OpenTemplate(docpath string) (*Template, error) {
 			t.documentRels[f.Name] = f
 		}
 
+		// add all xml files
+		extensionLength := strings.LastIndex(f.FileInfo().Name(), ".")
+		extension := ""
+		if extensionLength > 0 {
+			extension = f.FileInfo().Name()[extensionLength:]
+		}
+
+		if extension == ".xml" {
+			t.xmlFiles = append(t.xmlFiles, f)
+		}
 	}
 
 	if t.documentMain == nil {
@@ -163,42 +176,43 @@ func (t *Template) Params(v interface{}) {
 		}
 	}
 
-	f := t.documentMain // TODO: loop all xml files
-	xnode := t.fileToXMLStruct(f.Name)
+	for _, f := range t.xmlFiles {
+		xnode := t.fileToXMLStruct(f.Name)
 
-	// Enchance some markup (removed when building XML in the end)
-	// so easier to find some element
-	t.enchanceMarkup(xnode)
+		// Enchance some markup (removed when building XML in the end)
+		// so easier to find some element
+		t.enchanceMarkup(xnode)
 
-	// While formating docx sometimes same style node is split to
-	// multiple same style nodes and different content
-	// Merge them so placeholders are in the same node
-	t.fixBrokenPlaceholders(xnode)
+		// While formating docx sometimes same style node is split to
+		// multiple same style nodes and different content
+		// Merge them so placeholders are in the same node
+		t.fixBrokenPlaceholders(xnode)
 
-	// Complex placeholders with more depth needs to be expanded
-	// for correct replace
-	t.expandPlaceholders(xnode)
+		// Complex placeholders with more depth needs to be expanded
+		// for correct replace
+		t.expandPlaceholders(xnode)
 
-	// Replace params
-	t.replaceSingleParams(xnode, false)
+		// Replace params
+		t.replaceSingleParams(xnode, false)
 
-	// Collect placeholders with trigger but unset in `t.params`
-	// Placeholders with trigger `:empty` must be triggered
-	// otherwise they are left
-	t.triggerMissingParams(xnode)
+		// Collect placeholders with trigger but unset in `t.params`
+		// Placeholders with trigger `:empty` must be triggered
+		// otherwise they are left
+		t.triggerMissingParams(xnode)
 
-	// xnode.Walk(func(n *xmlNode) {
-	// 	if is, _ := n.IsListItem(); is {
-	// 		n.Walk(func(wt *xmlNode) {
-	// 			if wt.Tag() == "w-t" {
-	// 				color.Yellow("%s", wt)
-	// 			}
-	// 		})
-	// 	}
-	// })
+		// xnode.Walk(func(n *xmlNode) {
+		// 	if is, _ := n.IsListItem(); is {
+		// 		n.Walk(func(wt *xmlNode) {
+		// 			if wt.Tag() == "w-t" {
+		// 				color.Yellow("%s", wt)
+		// 			}
+		// 		})
+		// 	}
+		// })
 
-	// Save []bytes
-	t.modified[f.Name] = structToXMLBytes(xnode)
+		// Save []bytes
+		t.modified[f.Name] = structToXMLBytes(xnode)
+	}
 }
 
 // Collect and trigger placeholders with trigger but unset in `t.params`
@@ -632,20 +646,21 @@ func (t *Template) Plaintext() string {
 
 	plaintext := ""
 
-	f := t.documentMain // TODO: loop all xml files
-	xnode := t.bytesToXMLStruct(t.modified[f.Name])
+	for _, f := range t.xmlFiles {
+		xnode := t.bytesToXMLStruct(t.modified[f.Name])
 
-	xnode.Walk(func(n *xmlNode) {
-		if n.Tag() != "w-p" {
-			return
-		}
+		xnode.Walk(func(n *xmlNode) {
+			if n.Tag() != "w-p" {
+				return
+			}
 
-		s := string(n.AllContents())
-		plaintext += s
-		if s != "" {
-			plaintext += "\n"
-		}
-	})
+			s := string(n.AllContents())
+			plaintext += s
+			if s != "" {
+				plaintext += "\n"
+			}
+		})
+	}
 
 	return plaintext
 }

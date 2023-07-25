@@ -70,10 +70,11 @@ func TestPlaceholders(t *testing.T) {
 		"user.template.docx",
 		"tables.docx",
 		"lists.docx",
+		"header-footer.docx",
 	}
 
 	for _, fname := range filenames {
-
+		t.Logf("Файл %s", fname)
 		inputs := []string{
 			"struct",
 			"json",
